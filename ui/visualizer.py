@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from dataclasses import dataclass, field
@@ -25,6 +26,7 @@ class SolverRun:
     color: tuple[int, int, int]
     actions: list[int]
     states: list[GameState] = field(default_factory=list)
+    step_rewards: list[float] = field(default_factory=list)
     current_step: int = 0
     total_reward: float = 0.0
     solve_time_ms: float = 0.0
@@ -73,6 +75,7 @@ class Visualizer:
         """Simulate the actions and store each intermediate state."""
         state = self.level.copy()
         run.states = [state.copy()]
+        run.step_rewards = [0.0]
         run.total_reward = 0.0
         for action in run.actions:
             if state.done:
@@ -80,14 +83,31 @@ class Visualizer:
             state, reward, done = state.step(action)
             run.total_reward += reward
             run.states.append(state.copy())
+            run.step_rewards.append(run.total_reward)
         run.done = state.done and state.won
 
     def run(self) -> None:
         """Main visualization loop."""
+        import signal
+        import threading
+
+        # Watchdog: if main loop doesn't exit within 2s of _shutdown being set, force kill
+        self._shutdown = threading.Event()
+
+        def watchdog():
+            self._shutdown.wait()
+            time.sleep(2)
+            os._exit(0)
+
+        wd = threading.Thread(target=watchdog, daemon=True)
+        wd.start()
+
+        signal.signal(signal.SIGINT, lambda *_: self._shutdown.set())
+
         running = True
         last_step_time = pygame.time.get_ticks()
 
-        while running:
+        while running and not self._shutdown.is_set():
             self.clock.tick(FPS)
 
             for event in pygame.event.get():
@@ -117,6 +137,7 @@ class Visualizer:
             pygame.display.flip()
 
         pygame.quit()
+        os._exit(0)
 
     def _advance_all(self) -> None:
         all_finished = True
@@ -163,11 +184,19 @@ class Visualizer:
         stats = self.font_small.render(step_text, True, COLORS["text"])
         self.screen.blit(stats, (x_offset + 10, 38))
 
-        reward_text = f"Reward: {run.total_reward:.0f}"
+        # Show cumulative reward up to current step
+        current_reward = run.step_rewards[run.current_step] if run.current_step < len(run.step_rewards) else run.total_reward
+        reward_text = f"Reward: {current_reward:.0f}"
         rt = self.font_small.render(reward_text, True, COLORS["text"])
         self.screen.blit(rt, (x_offset + 10, 55))
 
-        time_text = f"Solve: {run.solve_time_ms:.0f}ms"
+        # Show solve time with appropriate precision
+        if run.solve_time_ms < 1:
+            time_text = f"Solve: {run.solve_time_ms * 1000:.0f}us"
+        elif run.solve_time_ms < 100:
+            time_text = f"Solve: {run.solve_time_ms:.1f}ms"
+        else:
+            time_text = f"Solve: {run.solve_time_ms:.0f}ms"
         tt = self.font_small.render(time_text, True, COLORS["text"])
         self.screen.blit(tt, (x_offset + 150, 55))
 
@@ -176,19 +205,22 @@ class Visualizer:
         st = self.font.render(status, True, status_color)
         self.screen.blit(st, (x_offset + 150, 36))
 
-        # HP bar
-        hp_x = x_offset + 10
-        hp_y = 75
-        hp_w = self.panel_width - 20
-        hp_h = 8
+        # HP bar with label
+        hp_label = self.font_small.render(f"HP: {state.health}/100", True, COLORS["text"])
+        self.screen.blit(hp_label, (x_offset + 10, 73))
+        hp_x = x_offset + 110
+        hp_y = 76
+        hp_w = self.panel_width - 130
+        hp_h = 12
         pygame.draw.rect(self.screen, (60, 60, 60), (hp_x, hp_y, hp_w, hp_h))
         hp_ratio = max(0, state.health / 100)
         hp_color = (0, 200, 0) if hp_ratio > 0.5 else ((255, 165, 0) if hp_ratio > 0.25 else (255, 0, 0))
         pygame.draw.rect(self.screen, hp_color, (hp_x, hp_y, int(hp_w * hp_ratio), hp_h))
+        pygame.draw.rect(self.screen, (80, 80, 100), (hp_x, hp_y, hp_w, hp_h), 1)
 
         # Grid
         grid_x = x_offset + (self.panel_width - state.cols * self.tile) // 2
-        grid_y = 95
+        grid_y = 100
 
         for r in range(state.rows):
             for c in range(state.cols):

@@ -105,11 +105,6 @@ class GameState:
         # --- move player ---
         ns.player_pos = (nr, nc)
 
-        # --- check if player walked into an enemy ---
-        reward += ns._check_enemy_collision()
-        if ns.done:
-            return ns, reward, True
-
         # --- tile effects ---
         if tile == KEY:
             key_id = len(ns.keys_collected)
@@ -131,9 +126,18 @@ class GameState:
             reward += 100
             return ns, reward, True
 
-        # --- enemies move, then check collision again ---
+        # --- check collision with enemies (before they move) ---
+        hit = ns._check_enemy_collision()
+        reward += hit
+        if ns.done:
+            return ns, reward, True
+
+        # --- enemies move ---
         ns._move_enemies()
-        reward += ns._check_enemy_collision()
+
+        # --- check again only if not already hit this step ---
+        if hit == 0.0:
+            reward += ns._check_enemy_collision()
 
         # --- timeout ---
         if ns.steps >= ns.max_steps:

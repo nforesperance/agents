@@ -2,8 +2,8 @@
 
 # Grid settings
 TILE_SIZE = 40
-GRID_MIN = 20
-GRID_MAX = 40
+GRID_MIN = 7
+GRID_MAX = 15
 DEFAULT_GRID_SIZE = 9
 
 # Tile types
@@ -82,5 +82,5 @@ LLM_MAX_STEPS = 100
 # Visualization
 FPS = 10
 SOLVER_STEP_DELAY = 1000  # ms between steps in visualization
-WINDOW_WIDTH = 1920 #1400
-WINDOW_HEIGHT = 1080 #800
+WINDOW_WIDTH = 1400
+WINDOW_HEIGHT = 800

@@ -24,10 +24,13 @@ def train(
     difficulty: int = 1,
     save_dir: str = "models",
     save_every: int = 100,
+    snapshot_every: int = 500,
     log_every: int = 10,
 ) -> None:
     """Train DQN agent on randomly generated levels."""
     os.makedirs(save_dir, exist_ok=True)
+    snapshot_dir = os.path.join(save_dir, "snapshots")
+    os.makedirs(snapshot_dir, exist_ok=True)
 
     agent = RLSolver(grid_size=grid_size)
     generator = LevelGenerator()
@@ -105,6 +108,14 @@ def train(
         if (ep + 1) % save_every == 0:
             agent.save(model_path)
 
+        # Save snapshot
+        if (ep + 1) % snapshot_every == 0:
+            snap_path = os.path.join(
+                snapshot_dir,
+                f"dqn_grid{grid_size}_d{difficulty}_ep{agent.episodes_done}.pt",
+            )
+            agent.save(snap_path)
+
     # Final save
     agent.save(model_path)
     print(f"\nTraining complete. Model saved to {model_path}")
@@ -153,6 +164,7 @@ if __name__ == "__main__":
     parser.add_argument("--difficulty", type=int, default=1, help="Difficulty (1-5)")
     parser.add_argument("--save-dir", type=str, default="models", help="Model save directory")
     parser.add_argument("--save-every", type=int, default=100, help="Save checkpoint every N episodes")
+    parser.add_argument("--snapshot-every", type=int, default=500, help="Save snapshot every N episodes")
     args = parser.parse_args()
 
     train(
@@ -161,4 +173,5 @@ if __name__ == "__main__":
         difficulty=args.difficulty,
         save_dir=args.save_dir,
         save_every=args.save_every,
+        snapshot_every=args.snapshot_every,
     )

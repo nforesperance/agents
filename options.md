@@ -135,3 +135,19 @@ LLM	Week 9 (NLP, Transformers, LLMs)
 The framework itself	Week 10 (agent architectures), Week 13 (deployment)
 Next steps
 You'll want to train the RL agent first (python main.py train) so it actually learns, then run the demo. Want me to kick off a training run, or would you like to modify anything first?
+
+python main.py demo --difficulty 4 --seed 78190 --solvers astar bfs
+python main.py demo --solvers astar astar-safe --difficulty 4 --seed 691069
+python main.py demo --solvers astar astar-safe rl --difficulty 1 --seed 880895
+
+
+
+python main.py train --episodes 10000 --difficulty 1 --snapshot-every 500
+
+
+# See how the agent performed at episode 500
+python main.py demo --solvers astar rl --rl-snapshot models/snapshots/dqn_grid9_d1_ep500.pt --seed 42
+
+# Compare episode 500 vs episode 5000 (run two demos)
+python main.py demo --solvers rl --rl-snapshot models/snapshots/dqn_grid9_d1_ep500.pt --seed 42
+python main.py demo --solvers rl --rl-snapshot models/snapshots/dqn_grid9_d1_ep5000.pt --seed 42
