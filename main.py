@@ -162,6 +162,7 @@ def cmd_train(args) -> None:
         save_dir="models",
         save_every=args.save_every,
         snapshot_every=args.snapshot_every,
+        curriculum=not args.no_curriculum,
     )
 
 
@@ -352,6 +353,7 @@ def main() -> None:
     p_train.add_argument("--episodes", type=int, default=2000, help="Training episodes")
     p_train.add_argument("--save-every", type=int, default=100, help="Save every N episodes")
     p_train.add_argument("--snapshot-every", type=int, default=500, help="Save snapshot every N episodes")
+    p_train.add_argument("--no-curriculum", action="store_true", help="Disable curriculum learning, train on fixed difficulty")
     p_train.set_defaults(func=cmd_train)
 
     # play
