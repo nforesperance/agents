@@ -87,6 +87,7 @@ def train(
 
     rewards_history = []
     solved_history = []
+    stage_solved = []  # tracks solve rate for current stage only
     loss_history = []
 
     start_time = time.time()
@@ -123,8 +124,10 @@ def train(
                 break
 
         agent.decay_epsilon()
+        won = 1 if state.won else 0
         rewards_history.append(episode_reward)
-        solved_history.append(1 if state.won else 0)
+        solved_history.append(won)
+        stage_solved.append(won)
 
         if losses:
             loss_history.append(np.mean(losses))
@@ -152,11 +155,12 @@ def train(
             )
 
         # Curriculum advancement
-        if curriculum and len(solved_history) >= ADVANCE_WINDOW:
-            recent_rate = np.mean(solved_history[-ADVANCE_WINDOW:])
+        if curriculum and len(stage_solved) >= ADVANCE_WINDOW:
+            recent_rate = np.mean(stage_solved[-ADVANCE_WINDOW:])
             if recent_rate >= ADVANCE_THRESHOLD and stage < len(CURRICULUM) - 1:
                 stage += 1
                 g, nk, nt, ne, label = CURRICULUM[stage]
+                stage_solved = []  # reset so it must prove itself on the new stage
                 print(f"\n>>> ADVANCING to Stage {stage}: {label} "
                       f"(solve rate was {recent_rate*100:.1f}%)\n")
 
