@@ -28,16 +28,16 @@ from solvers.rl_solver import RLSolver
 
 # Curriculum stages: (grid_size, num_keys, num_traps, num_enemies, label)
 CURRICULUM = [
+    (5, 0, 0, 0, "5x5 goal only"),
     (7, 0, 0, 0, "7x7 goal only"),
-    (7, 0, 1, 0, "7x7 + 1 trap"),
     (7, 0, 2, 0, "7x7 + 2 traps"),
     (7, 1, 2, 0, "7x7 + key/door + 2 traps"),
     (9, 1, 3, 1, "9x9 full (difficulty 1)"),
     (9, 2, 5, 2, "9x9 hard (difficulty 2)"),
 ]
 
-ADVANCE_THRESHOLD = 0.6   # 60% solve rate to advance
-ADVANCE_WINDOW = 200      # over the last 200 episodes
+ADVANCE_THRESHOLD = 0.40  # 40% solve rate to advance
+ADVANCE_WINDOW = 100      # over the last 100 episodes
 
 
 def train(
