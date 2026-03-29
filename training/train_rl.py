@@ -158,6 +158,13 @@ def train(
         if curriculum and len(stage_solved) >= ADVANCE_WINDOW:
             recent_rate = np.mean(stage_solved[-ADVANCE_WINDOW:])
             if recent_rate >= ADVANCE_THRESHOLD and stage < len(CURRICULUM) - 1:
+                # Save snapshot at stage completion
+                snap_path = os.path.join(
+                    snapshot_dir,
+                    f"dqn_grid{max_grid}_d{difficulty}_stage{stage}_ep{agent.episodes_done}.pt",
+                )
+                agent.save(snap_path)
+
                 stage += 1
                 g, nk, nt, ne, label = CURRICULUM[stage]
                 stage_solved = []  # reset so it must prove itself on the new stage
