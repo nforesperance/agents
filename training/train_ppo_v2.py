@@ -57,12 +57,23 @@ def main():
     save_dir = args.save_dir
 
     # Guard: if save_dir looks like a Google Drive path, check it's mounted
-    if "/content/drive" in save_dir and not os.path.ismount("/content/drive"):
-        print("ERROR: Google Drive not mounted! Run this first:")
-        print("  from google.colab import drive; drive.mount('/content/drive')")
-        sys.exit(1)
-
-    os.makedirs(save_dir, exist_ok=True)
+    if "/content/drive" in save_dir:
+        if not os.path.ismount("/content/drive"):
+            print("ERROR: Google Drive not mounted! Run this first:")
+            print("  from google.colab import drive; drive.mount('/content/drive')")
+            sys.exit(1)
+        # Verify we can actually write to Drive
+        test_file = os.path.join(save_dir, ".write_test")
+        os.makedirs(save_dir, exist_ok=True)
+        try:
+            with open(test_file, "w") as f:
+                f.write("ok")
+            os.remove(test_file)
+        except Exception as e:
+            print(f"ERROR: Cannot write to {save_dir}: {e}")
+            sys.exit(1)
+    else:
+        os.makedirs(save_dir, exist_ok=True)
     os.makedirs(os.path.join(save_dir, "snapshots"), exist_ok=True)
 
     model_path = os.path.join(save_dir, "ppo_v2_grid10.zip")
@@ -146,10 +157,16 @@ def main():
             f"Time: {elapsed:.0f}s"
         )
 
-        # Save
+        # Save + verify
         model.save(model_path)
         with open(state_path, "w") as f:
             json.dump({"stage": stage, "steps_done": steps_done, "best_solve": best_solve}, f)
+        # Verify checkpoint actually landed on disk
+        saved_ok = os.path.exists(model_path) or os.path.exists(model_path + ".zip")
+        if not saved_ok:
+            print(f"ERROR: Save failed — {model_path} not found after save!")
+            print("Check that Google Drive is mounted.")
+            sys.exit(1)
 
         if solve_rate > best_solve:
             best_solve = solve_rate
