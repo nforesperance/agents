@@ -91,6 +91,30 @@ def cmd_demo(args) -> None:
             name="RL (DQN)", color=COLORS["rl"], actions=actions, solve_time_ms=elapsed,
         ))
 
+    # PPO solver
+    if "rl2" in args.solvers:
+        from solvers.ppo_solver import PPOSolver
+        ppo_path = args.rl_snapshot  # reuse --rl-snapshot for PPO too
+        if not ppo_path:
+            # try default paths
+            for candidate in [
+                os.path.join("models", f"ppo_grid{args.grid_size}_best.zip"),
+                os.path.join("models", f"ppo_grid{args.grid_size}_t0.zip"),
+            ]:
+                if os.path.exists(candidate):
+                    ppo_path = candidate
+                    break
+
+        ppo = PPOSolver(grid_size=args.grid_size, model_path=ppo_path)
+        print(f"Solving with RL (PPO)..." + (f" [{ppo_path}]" if ppo_path else " [untrained]"))
+        start = time.perf_counter()
+        actions = ppo.solve(level)
+        elapsed = (time.perf_counter() - start) * 1000
+        print(f"  PPO: {len(actions)} actions in {elapsed:.1f}ms")
+        solver_runs.append(SolverRun(
+            name="RL (PPO)", color=(255, 160, 0), actions=actions, solve_time_ms=elapsed,
+        ))
+
     # LLM solver (runs live during visualization)
     if "llm" in args.solvers:
         from solvers.llm_solver import LLMSolver
@@ -341,14 +365,14 @@ def main() -> None:
     # demo
     p_demo = sub.add_parser("demo", parents=[common], help="Visual solver comparison")
     p_demo.add_argument("--solvers", nargs="+", default=["astar", "rl", "llm"],
-                        choices=["astar", "astar-safe", "bfs", "rl", "llm"],
+                        choices=["astar", "astar-safe", "bfs", "rl", "rl2", "llm"],
                         help="Solvers to compare")
     p_demo.set_defaults(func=cmd_demo)
 
     # benchmark
     p_bench = sub.add_parser("benchmark", parents=[common], help="Run benchmark suite")
     p_bench.add_argument("--solvers", nargs="+", default=["astar", "bfs", "rl", "llm"],
-                         choices=["astar", "astar-safe", "bfs", "rl", "llm"])
+                         choices=["astar", "astar-safe", "bfs", "rl", "rl2", "llm"])
     p_bench.add_argument("--num-levels", type=int, default=20, help="Number of levels to test")
     p_bench.add_argument("--save-plot", type=str, default=None, help="Save dashboard to file")
     p_bench.set_defaults(func=cmd_benchmark)
