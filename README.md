@@ -447,3 +447,21 @@ drive.mount('/content/drive')
 
 # Train — models + snapshots save directly to Drive
 !python training/train_traps.py --episodes 50000 --snapshot-every 2000 --save-dir /content/drive/MyDrive/ai_models
+
+
+
+source venv/bin/activate
+
+PPO Training (on Colab):
+
+!pip install stable-baselines3 gymnasium
+!python training/train_ppo.py --steps 500000 --grid-size 10 --traps 0 --save-dir /content/drive/MyDrive/ai_models
+
+
+Demo with PPO (locally):
+python main.py demo --solvers astar rl2 --grid-size 10 --simple --rl-snapshot models/ppo_grid10_best.zip
+
+
+streamlit run app.py
+
+
