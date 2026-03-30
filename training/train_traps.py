@@ -26,20 +26,21 @@ from config import RL_MAX_STEPS, RL_TARGET_UPDATE
 from game.level_generator import LevelGenerator
 from solvers.rl_solver import RLSolver
 
-# Curriculum: gradually increase trap count
-# (num_traps, label)
+# Curriculum: (grid_size, num_traps, label)
+# Start tiny, build up to full 10x10 with traps
 TRAP_CURRICULUM = [
-    (0, "no traps"),
-    (2, "2 traps"),
-    (5, "5 traps"),
-    (10, "10 traps"),
-    (20, "20 traps"),
-    (30, "30 traps"),
+    (5, 0, "5x5 no traps"),
+    (7, 0, "7x7 no traps"),
+    (10, 0, "10x10 no traps"),
+    (10, 3, "10x10 + 3 traps"),
+    (10, 8, "10x10 + 8 traps"),
+    (10, 15, "10x10 + 15 traps"),
+    (10, 25, "10x10 + 25 traps"),
 ]
 
-ADVANCE_THRESHOLD = 0.50
-ADVANCE_WINDOW = 200
-GRID_SIZE = 10
+ADVANCE_THRESHOLD = 0.40
+ADVANCE_WINDOW = 100
+MAX_GRID_SIZE = 10
 
 
 def train_traps(
@@ -52,19 +53,19 @@ def train_traps(
     snapshot_dir = os.path.join(save_dir, "snapshots")
     os.makedirs(snapshot_dir, exist_ok=True)
 
-    agent = RLSolver(grid_size=GRID_SIZE)
+    agent = RLSolver(grid_size=MAX_GRID_SIZE)
     generator = LevelGenerator()
 
-    model_path = os.path.join(save_dir, f"dqn_traps_grid{GRID_SIZE}.pt")
+    model_path = os.path.join(save_dir, f"dqn_traps_grid{MAX_GRID_SIZE}.pt")
     stage = 0
     if os.path.exists(model_path):
         checkpoint = agent.load(model_path)
         stage = checkpoint.get("stage", 0)
         print(f"Resuming from episode {agent.episodes_done}, stage {stage}")
 
-    num_traps, label = TRAP_CURRICULUM[stage]
+    grid_size, num_traps, label = TRAP_CURRICULUM[stage]
 
-    print(f"Training DQN on {GRID_SIZE}x{GRID_SIZE} grids — TRAPS ONLY")
+    print(f"Training DQN — TRAPS ONLY (max grid {MAX_GRID_SIZE}x{MAX_GRID_SIZE})")
     print(f"Device: {agent.device}")
     print(f"Episodes: {episodes}")
     print(f"Curriculum: {len(TRAP_CURRICULUM)} stages, advance at {ADVANCE_THRESHOLD*100:.0f}% over {ADVANCE_WINDOW} episodes")
@@ -80,7 +81,7 @@ def train_traps(
     for ep in range(episodes):
         # Generate level — traps only, no keys/doors/enemies
         level = generator.generate(
-            size=GRID_SIZE,
+            size=grid_size,
             num_keys=0,
             num_traps=num_traps,
             num_enemies=0,
@@ -126,7 +127,7 @@ def train_traps(
             recent_s = solved_history[-log_every:]
             elapsed = time.time() - start_time
             print(
-                f"Ep {agent.episodes_done:5d} [S{stage} {num_traps}t] | "
+                f"Ep {agent.episodes_done:5d} [S{stage} {grid_size}x{grid_size} {num_traps}t] | "
                 f"Reward: {np.mean(recent_r):7.1f} | "
                 f"Solved: {np.mean(recent_s)*100:5.1f}% | "
                 f"Eps: {agent.epsilon:.3f} | "
@@ -139,12 +140,12 @@ def train_traps(
             if recent_rate >= ADVANCE_THRESHOLD and stage < len(TRAP_CURRICULUM) - 1:
                 snap_path = os.path.join(
                     snapshot_dir,
-                    f"dqn_traps_grid{GRID_SIZE}_stage{stage}_ep{agent.episodes_done}.pt",
+                    f"dqn_traps_grid{MAX_GRID_SIZE}_stage{stage}_ep{agent.episodes_done}.pt",
                 )
-                agent.save(snap_path)
+                agent.save(snap_path, stage=stage)
 
                 stage += 1
-                num_traps, label = TRAP_CURRICULUM[stage]
+                grid_size, num_traps, label = TRAP_CURRICULUM[stage]
                 stage_solved = []
                 print(f"\n>>> ADVANCING to Stage {stage}: {label} "
                       f"(solve rate was {recent_rate*100:.1f}%)\n")
@@ -157,7 +158,7 @@ def train_traps(
         if (ep + 1) % snapshot_every == 0:
             snap_path = os.path.join(
                 snapshot_dir,
-                f"dqn_traps_grid{GRID_SIZE}_ep{agent.episodes_done}.pt",
+                f"dqn_traps_grid{MAX_GRID_SIZE}_ep{agent.episodes_done}.pt",
             )
             agent.save(snap_path)
 
