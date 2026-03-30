@@ -26,25 +26,26 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from config import DEFAULT_GRID_SIZE
 from solvers.ppo_solver import PuzzleEnv
 
-# Curriculum: (grid_size, num_traps, label)
+# Curriculum: (grid_size, num_traps, max_steps, label)
+# max_steps scales with grid — small mazes don't need 200 steps
 CURRICULUM = [
-    (5, 0, "5x5 no traps"),
-    (7, 0, "7x7 no traps"),
-    (9, 0, "9x9 no traps"),
-    (10, 0, "10x10 no traps"),
-    (10, 5, "10x10 + 5 traps"),
-    (10, 10, "10x10 + 10 traps"),
-    (10, 20, "10x10 + 20 traps"),
+    (5, 0, 50, "5x5 no traps"),
+    (7, 0, 80, "7x7 no traps"),
+    (9, 0, 150, "9x9 no traps"),
+    (10, 0, 200, "10x10 no traps"),
+    (10, 5, 200, "10x10 + 5 traps"),
+    (10, 10, 200, "10x10 + 10 traps"),
+    (10, 20, 200, "10x10 + 20 traps"),
 ]
 
-ADVANCE_THRESHOLD = 0.40
+ADVANCE_THRESHOLD = 0.50
 EVAL_EPISODES = 50
-STEPS_PER_STAGE = 80_000  # train this many steps per stage before checking
+STEPS_PER_STAGE = 50_000
 
 
-def evaluate(model, grid_size, num_traps, obs_size=10, n_episodes=50):
+def evaluate(model, grid_size, num_traps, obs_size=10, max_steps=200, n_episodes=50):
     """Evaluate model on fresh levels."""
-    env = PuzzleEnv(grid_size=grid_size, num_traps=num_traps, obs_size=obs_size)
+    env = PuzzleEnv(grid_size=grid_size, num_traps=num_traps, obs_size=obs_size, max_steps=max_steps)
     wins = 0
     total_reward = 0.0
     for _ in range(n_episodes):
@@ -62,9 +63,9 @@ def evaluate(model, grid_size, num_traps, obs_size=10, n_episodes=50):
     return wins / n_episodes, total_reward / n_episodes
 
 
-def make_env(grid_size, num_traps, obs_size=10):
+def make_env(grid_size, num_traps, obs_size=10, max_steps=200):
     def _init():
-        return PuzzleEnv(grid_size=grid_size, num_traps=num_traps, obs_size=obs_size)
+        return PuzzleEnv(grid_size=grid_size, num_traps=num_traps, obs_size=obs_size, max_steps=max_steps)
     return _init
 
 
@@ -84,9 +85,9 @@ def train_ppo(
     state_path = os.path.join(save_dir, f"ppo_grid{target_grid}_t{target_traps}_state.json")
 
     # Filter curriculum up to the target
-    curriculum = [(g, t, l) for g, t, l in CURRICULUM if g <= target_grid and t <= target_traps]
+    curriculum = [(g, t, ms, l) for g, t, ms, l in CURRICULUM if g <= target_grid and t <= target_traps]
     if not curriculum or curriculum[-1][:2] != (target_grid, target_traps):
-        curriculum.append((target_grid, target_traps, f"{target_grid}x{target_grid} + {target_traps} traps"))
+        curriculum.append((target_grid, target_traps, 200, f"{target_grid}x{target_grid} + {target_traps} traps"))
 
     # Load state
     stage = 0
@@ -98,7 +99,7 @@ def train_ppo(
             steps_done = state.get("steps_done", 0)
         print(f"Resuming: stage {stage}, {steps_done:,} steps done")
 
-    grid_size, num_traps, label = curriculum[min(stage, len(curriculum) - 1)]
+    grid_size, num_traps, max_steps, label = curriculum[min(stage, len(curriculum) - 1)]
 
     print(f"PPO Curriculum Training — target {target_grid}x{target_grid} + {target_traps} traps")
     print(f"Total steps: {total_steps:,}  |  Stages: {len(curriculum)}")
@@ -107,7 +108,7 @@ def train_ppo(
     print("-" * 60)
 
     # Create environments for current stage
-    env = DummyVecEnv([make_env(grid_size, num_traps, obs_size=target_grid) for _ in range(n_envs)])
+    env = DummyVecEnv([make_env(grid_size, num_traps, obs_size=target_grid, max_steps=max_steps) for _ in range(n_envs)])
 
     # Create or load model
     if os.path.exists(model_path):
@@ -134,10 +135,10 @@ def train_ppo(
     remaining = total_steps - steps_done
 
     while remaining > 0 and stage < len(curriculum):
-        grid_size, num_traps, label = curriculum[stage]
+        grid_size, num_traps, max_steps, label = curriculum[stage]
 
         # Update envs for current stage
-        env = DummyVecEnv([make_env(grid_size, num_traps, obs_size=target_grid) for _ in range(n_envs)])
+        env = DummyVecEnv([make_env(grid_size, num_traps, obs_size=target_grid, max_steps=max_steps) for _ in range(n_envs)])
         model.set_env(env)
 
         # Train for a chunk
@@ -147,7 +148,7 @@ def train_ppo(
         remaining -= chunk
 
         # Evaluate
-        solve_rate, avg_reward = evaluate(model, grid_size, num_traps, obs_size=target_grid, n_episodes=EVAL_EPISODES)
+        solve_rate, avg_reward = evaluate(model, grid_size, num_traps, obs_size=target_grid, max_steps=max_steps, n_episodes=EVAL_EPISODES)
         elapsed = time.time() - start_time
 
         print(
@@ -179,7 +180,7 @@ def train_ppo(
             snap = os.path.join(snap_dir, f"ppo_grid{target_grid}_stage{stage}_done.zip")
             model.save(snap)
             stage += 1
-            grid_size, num_traps, label = curriculum[stage]
+            grid_size, num_traps, max_steps, label = curriculum[stage]
             print(f"\n>>> ADVANCING to Stage {stage}: {label} (was {solve_rate*100:.1f}%)\n")
             with open(state_path, "w") as f:
                 json.dump({"stage": stage, "steps_done": steps_done}, f)
