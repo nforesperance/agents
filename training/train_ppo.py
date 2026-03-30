@@ -132,7 +132,7 @@ def train_ppo(
         model = PPO.load(model_path, env=env)
     else:
         model = PPO(
-            "CnnPolicy",
+            "MlpPolicy",
             env,
             learning_rate=3e-4,
             n_steps=2048,

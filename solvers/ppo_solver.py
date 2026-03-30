@@ -44,10 +44,10 @@ class PuzzleEnv(gym.Env):
         self.max_steps = max_steps
         self.generator = LevelGenerator()
 
-        # 5 channels, grid_size x grid_size
+        # Flattened observation: 5 channels * grid_size * grid_size
         self.observation_space = spaces.Box(
             low=0.0, high=1.0,
-            shape=(5, grid_size, grid_size),
+            shape=(5 * grid_size * grid_size,),
             dtype=np.float32,
         )
         self.action_space = spaces.Discrete(5)  # UP, DOWN, LEFT, RIGHT, WAIT
@@ -61,7 +61,7 @@ class PuzzleEnv(gym.Env):
         padded = np.zeros((c, self.grid_size, self.grid_size), dtype=np.float32)
         ph, pw = min(h, self.grid_size), min(w, self.grid_size)
         padded[:, :ph, :pw] = obs[:, :ph, :pw]
-        return padded
+        return padded.flatten()
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -132,7 +132,7 @@ class PPOSolver(BaseSolver):
         padded = np.zeros((c, self.grid_size, self.grid_size), dtype=np.float32)
         ph, pw = min(h, self.grid_size), min(w, self.grid_size)
         padded[:, :ph, :pw] = obs[:, :ph, :pw]
-        return padded
+        return padded.flatten()
 
     def load(self, path: str) -> None:
         from stable_baselines3 import PPO
