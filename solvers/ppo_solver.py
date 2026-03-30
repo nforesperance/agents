@@ -35,19 +35,21 @@ class PuzzleEnv(gym.Env):
         num_keys: int = 0,
         num_enemies: int = 0,
         max_steps: int = RL_MAX_STEPS,
+        obs_size: int = 10,
     ):
         super().__init__()
         self.grid_size = grid_size
+        self.obs_size = obs_size  # fixed observation size for all stages
         self.num_traps = num_traps
         self.num_keys = num_keys
         self.num_enemies = num_enemies
         self.max_steps = max_steps
         self.generator = LevelGenerator()
 
-        # Flattened observation: 5 channels * grid_size * grid_size
+        # Flattened observation: always padded to obs_size x obs_size
         self.observation_space = spaces.Box(
             low=0.0, high=1.0,
-            shape=(5 * grid_size * grid_size,),
+            shape=(5 * obs_size * obs_size,),
             dtype=np.float32,
         )
         self.action_space = spaces.Discrete(5)  # UP, DOWN, LEFT, RIGHT, WAIT
@@ -58,8 +60,8 @@ class PuzzleEnv(gym.Env):
     def _pad_obs(self, state: GameState) -> np.ndarray:
         obs = state.to_observation()
         c, h, w = obs.shape
-        padded = np.zeros((c, self.grid_size, self.grid_size), dtype=np.float32)
-        ph, pw = min(h, self.grid_size), min(w, self.grid_size)
+        padded = np.zeros((c, self.obs_size, self.obs_size), dtype=np.float32)
+        ph, pw = min(h, self.obs_size), min(w, self.obs_size)
         padded[:, :ph, :pw] = obs[:, :ph, :pw]
         return padded.flatten()
 
@@ -129,8 +131,8 @@ class PPOSolver(BaseSolver):
     def _pad_obs(self, state: GameState) -> np.ndarray:
         obs = state.to_observation()
         c, h, w = obs.shape
-        padded = np.zeros((c, self.grid_size, self.grid_size), dtype=np.float32)
-        ph, pw = min(h, self.grid_size), min(w, self.grid_size)
+        padded = np.zeros((c, self.obs_size, self.obs_size), dtype=np.float32)
+        ph, pw = min(h, self.obs_size), min(w, self.obs_size)
         padded[:, :ph, :pw] = obs[:, :ph, :pw]
         return padded.flatten()
 

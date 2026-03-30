@@ -42,9 +42,9 @@ EVAL_EPISODES = 50
 STEPS_PER_STAGE = 80_000  # train this many steps per stage before checking
 
 
-def evaluate(model, grid_size, num_traps, n_episodes=50):
+def evaluate(model, grid_size, num_traps, obs_size=10, n_episodes=50):
     """Evaluate model on fresh levels."""
-    env = PuzzleEnv(grid_size=grid_size, num_traps=num_traps)
+    env = PuzzleEnv(grid_size=grid_size, num_traps=num_traps, obs_size=obs_size)
     wins = 0
     total_reward = 0.0
     for _ in range(n_episodes):
@@ -62,9 +62,9 @@ def evaluate(model, grid_size, num_traps, n_episodes=50):
     return wins / n_episodes, total_reward / n_episodes
 
 
-def make_env(grid_size, num_traps):
+def make_env(grid_size, num_traps, obs_size=10):
     def _init():
-        return PuzzleEnv(grid_size=grid_size, num_traps=num_traps)
+        return PuzzleEnv(grid_size=grid_size, num_traps=num_traps, obs_size=obs_size)
     return _init
 
 
@@ -107,7 +107,7 @@ def train_ppo(
     print("-" * 60)
 
     # Create environments for current stage
-    env = DummyVecEnv([make_env(grid_size, num_traps) for _ in range(n_envs)])
+    env = DummyVecEnv([make_env(grid_size, num_traps, obs_size=target_grid) for _ in range(n_envs)])
 
     # Create or load model
     if os.path.exists(model_path):
@@ -137,7 +137,7 @@ def train_ppo(
         grid_size, num_traps, label = curriculum[stage]
 
         # Update envs for current stage
-        env = DummyVecEnv([make_env(grid_size, num_traps) for _ in range(n_envs)])
+        env = DummyVecEnv([make_env(grid_size, num_traps, obs_size=target_grid) for _ in range(n_envs)])
         model.set_env(env)
 
         # Train for a chunk
@@ -147,7 +147,7 @@ def train_ppo(
         remaining -= chunk
 
         # Evaluate
-        solve_rate, avg_reward = evaluate(model, grid_size, num_traps, EVAL_EPISODES)
+        solve_rate, avg_reward = evaluate(model, grid_size, num_traps, obs_size=target_grid, n_episodes=EVAL_EPISODES)
         elapsed = time.time() - start_time
 
         print(
