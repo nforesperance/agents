@@ -55,6 +55,13 @@ def main():
     args = parser.parse_args()
 
     save_dir = args.save_dir
+
+    # Guard: if save_dir looks like a Google Drive path, check it's mounted
+    if "/content/drive" in save_dir and not os.path.ismount("/content/drive"):
+        print("ERROR: Google Drive not mounted! Run this first:")
+        print("  from google.colab import drive; drive.mount('/content/drive')")
+        sys.exit(1)
+
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs(os.path.join(save_dir, "snapshots"), exist_ok=True)
 
@@ -66,7 +73,16 @@ def main():
     stage = 0
     steps_done = 0
     best_solve = 0.0
-    if os.path.exists(state_path):
+    has_state = os.path.exists(state_path)
+    has_model = os.path.exists(model_path)
+
+    if has_state and not has_model:
+        print(f"WARNING: State file found ({state_path}) but model is missing ({model_path})!")
+        print("The checkpoint may be corrupted. Training will start from scratch.")
+    elif not has_state and has_model:
+        print(f"WARNING: Model found but no state file. Will load model but start at stage 0.")
+
+    if has_state:
         with open(state_path) as f:
             st = json.load(f)
             stage = st.get("stage", 0)
@@ -85,7 +101,7 @@ def main():
     env = DummyVecEnv([make_env(grid_size, num_traps, max_steps) for _ in range(args.n_envs)])
 
     # Create or load model
-    if os.path.exists(model_path):
+    if has_model:
         model = PPO.load(model_path, env=env, device="cpu")
         print(f"Loaded {model_path}")
     else:
