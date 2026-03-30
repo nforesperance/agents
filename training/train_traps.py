@@ -31,6 +31,7 @@ from solvers.rl_solver import RLSolver
 TRAP_CURRICULUM = [
     (5, 0, "5x5 no traps"),
     (7, 0, "7x7 no traps"),
+    (8, 0, "8x8 no traps"),
     (9, 0, "9x9 no traps"),
     (10, 0, "10x10 no traps"),
     (10, 3, "10x10 + 3 traps"),
