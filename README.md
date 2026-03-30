@@ -434,3 +434,8 @@ Ce projet est developpe dans un cadre academique (UQAM INF8790). Contactez les a
 - **Cours** : INF8790 Fondements de l'Intelligence Artificielle -- UQAM 2025-2026
 
 Projet realise dans le cadre du cours INF8790 -- Fondements de l'Intelligence Artificielle / UQAM 2025-2026.
+
+
+
+!python training/train_traps.py --episodes 50000 --snapshot-every 2000
+python main.py demo --solvers astar-safe rl --rl-snapshot models/dqn_traps_grid10.pt --grid-size 10 --simple
