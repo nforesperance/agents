@@ -33,10 +33,15 @@ class LevelGenerator:
         Difficulty 1-5 scales grid size, keys, traps, enemies.
         """
         if difficulty > 1:
-            size = min(GRID_MAX, size + (difficulty - 1))
+            size = max(size, size + (difficulty - 1))
             num_keys = min(4, num_keys + difficulty - 1)
             num_traps = num_traps + difficulty * 2
             num_enemies = min(4, num_enemies + difficulty - 1)
+
+        # Scale hazards proportionally to grid area
+        area_ratio = (size * size) / (DEFAULT_GRID_SIZE * DEFAULT_GRID_SIZE)
+        num_traps = max(num_traps, int(num_traps * area_ratio))
+        num_enemies = max(num_enemies, int(num_enemies * area_ratio))
 
         grid = self._generate_maze(size, size)
 
@@ -57,6 +62,9 @@ class LevelGenerator:
         floor_cells.sort(key=lambda p: abs(p[0] - start_pos[0]) + abs(p[1] - start_pos[1]))
         goal_pos = floor_cells.pop()  # farthest
         grid[goal_pos] = GOAL
+
+        # Re-shuffle so remaining elements spread evenly
+        self.rng.shuffle(floor_cells)
 
         # Place keys
         actual_keys = min(num_keys, len(floor_cells))
@@ -83,6 +91,9 @@ class LevelGenerator:
                     break
                 grid[cell] = FLOOR
 
+        # Re-shuffle before placing hazards to spread them evenly
+        self.rng.shuffle(floor_cells)
+
         # Place traps
         actual_traps = min(num_traps, len(floor_cells))
         for _ in range(actual_traps):
@@ -105,9 +116,15 @@ class LevelGenerator:
             # Fallback: regenerate (rare with maze-based generation)
             return self.generate(size, num_keys, num_traps, num_enemies, difficulty)
 
+        # Scale HP based on grid size and hazard count
+        # Base: 100 HP for a 9x9 grid. Scale with area and hazard density.
+        base_hp = 100
+        hp = base_hp + actual_traps * 15 + actual_enemies * 20 + max(0, size - 9) * 5
+
         return GameState(
             grid=grid,
             player_pos=start_pos,
+            health=hp,
             total_keys=actual_keys,
             enemy_positions=enemy_positions,
             enemy_directions=enemy_directions,

@@ -245,8 +245,12 @@ class Visualizer:
         self.screen.blit(title, (x_offset + 10, 10))
 
         # Stats
-        total_steps = len(run.states) - 1 if run.states else 0
-        step_text = f"Step: {step_idx}/{total_steps}"
+        if run.live_solver is not None:
+            total_steps = len(run.states) - 1 if run.states else 0
+            step_text = f"Step: {total_steps}"
+        else:
+            total_steps = len(run.states) - 1 if run.states else 0
+            step_text = f"Step: {step_idx}/{total_steps}"
         stats = self.font_small.render(step_text, True, COLORS["text"])
         self.screen.blit(stats, (x_offset + 10, 38))
 
@@ -297,14 +301,15 @@ class Visualizer:
         self.screen.blit(st, (x_offset + 150, 36))
 
         # HP bar with label
-        hp_label = self.font_small.render(f"HP: {state.health}/100", True, COLORS["text"])
+        max_hp = self.level.health
+        hp_label = self.font_small.render(f"HP: {state.health}/{max_hp}", True, COLORS["text"])
         self.screen.blit(hp_label, (x_offset + 10, 73))
         hp_x = x_offset + 110
         hp_y = 76
         hp_w = self.panel_width - 130
         hp_h = 12
         pygame.draw.rect(self.screen, (60, 60, 60), (hp_x, hp_y, hp_w, hp_h))
-        hp_ratio = max(0, state.health / 100)
+        hp_ratio = max(0, state.health / max_hp) if max_hp > 0 else 0
         hp_color = (0, 200, 0) if hp_ratio > 0.5 else ((255, 165, 0) if hp_ratio > 0.25 else (255, 0, 0))
         pygame.draw.rect(self.screen, hp_color, (hp_x, hp_y, int(hp_w * hp_ratio), hp_h))
         pygame.draw.rect(self.screen, (80, 80, 100), (hp_x, hp_y, hp_w, hp_h), 1)

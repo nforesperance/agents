@@ -34,10 +34,14 @@ def cmd_demo(args) -> None:
     import random
     seed = args.seed if args.seed is not None else random.randint(0, 999999)
     gen = LevelGenerator(seed=seed)
-    level = gen.generate(size=args.grid_size, difficulty=args.difficulty)
+    if args.simple:
+        level = gen.generate(size=args.grid_size, num_keys=0, num_traps=0, num_enemies=0, difficulty=1)
+    else:
+        level = gen.generate(size=args.grid_size, difficulty=args.difficulty)
 
-    print(f"Seed: {seed}  |  Grid: {args.grid_size}x{args.grid_size}  |  Difficulty: {args.difficulty}")
-    print(f"Replay: python main.py demo --seed {seed} --grid-size {args.grid_size} --difficulty {args.difficulty}")
+    mode = "simple (goal only)" if args.simple else f"difficulty {args.difficulty}"
+    print(f"Seed: {seed}  |  Grid: {args.grid_size}x{args.grid_size}  |  {mode}")
+    print(f"Replay: python main.py demo --seed {seed} --grid-size {args.grid_size} --difficulty {args.difficulty}{'--simple' if args.simple else ''}")
     print()
     print(level.to_text())
     print()
@@ -331,6 +335,8 @@ def main() -> None:
     common.add_argument("--llm-model", type=str, default=None, help="Specific LLM model name")
     common.add_argument("--rl-snapshot", type=str, default=None,
                         help="Path to a specific RL snapshot (e.g. models/snapshots/dqn_grid9_d1_ep500.pt)")
+    common.add_argument("--simple", action="store_true",
+                        help="Goal only — no keys, traps, or enemies")
 
     # demo
     p_demo = sub.add_parser("demo", parents=[common], help="Visual solver comparison")
