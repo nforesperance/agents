@@ -197,7 +197,8 @@ def train_traps(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train DQN on 10x10 trap-only levels")
     parser.add_argument("--episodes", type=int, default=50000)
-    parser.add_argument("--save-dir", type=str, default="models")
+    parser.add_argument("--save-dir", type=str, default="models",
+                        help="Directory for model and snapshots (e.g. /content/drive/MyDrive/models)")
     parser.add_argument("--snapshot-every", type=int, default=2000)
     args = parser.parse_args()
 

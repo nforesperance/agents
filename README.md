@@ -439,3 +439,11 @@ Projet realise dans le cadre du cours INF8790 -- Fondements de l'Intelligence Ar
 
 !python training/train_traps.py --episodes 50000 --snapshot-every 2000
 python main.py demo --solvers astar-safe rl --rl-snapshot models/dqn_traps_grid10.pt --grid-size 10 --simple
+
+
+# Mount Google Drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+# Train — models + snapshots save directly to Drive
+!python training/train_traps.py --episodes 50000 --snapshot-every 2000 --save-dir /content/drive/MyDrive/ai_models
