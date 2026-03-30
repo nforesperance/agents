@@ -65,12 +65,11 @@ def train(
     generator = LevelGenerator()
 
     model_path = os.path.join(save_dir, f"dqn_grid{max_grid}_d{difficulty}.pt")
-    if os.path.exists(model_path):
-        agent.load(model_path)
-        print(f"Resuming from episode {agent.episodes_done}")
-
-    # Determine starting stage
     stage = 0
+    if os.path.exists(model_path):
+        checkpoint = agent.load(model_path)
+        stage = checkpoint.get("stage", 0)
+        print(f"Resuming from episode {agent.episodes_done}, stage {stage}")
     if curriculum:
         print(f"Curriculum training with {len(CURRICULUM)} stages")
         print(f"Advance threshold: {ADVANCE_THRESHOLD*100:.0f}% over last {ADVANCE_WINDOW} episodes")
@@ -173,7 +172,7 @@ def train(
 
         # Save checkpoint
         if (ep + 1) % save_every == 0:
-            agent.save(model_path)
+            agent.save(model_path, stage=stage)
 
         # Save snapshot
         if (ep + 1) % snapshot_every == 0:
@@ -184,7 +183,7 @@ def train(
             agent.save(snap_path)
 
     # Final save
-    agent.save(model_path)
+    agent.save(model_path, stage=stage)
     print(f"\nTraining complete. Model saved to {model_path}")
     if curriculum:
         print(f"Reached stage {stage}/{len(CURRICULUM)-1}: {CURRICULUM[stage][4]}")

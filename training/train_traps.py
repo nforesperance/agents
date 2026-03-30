@@ -56,11 +56,12 @@ def train_traps(
     generator = LevelGenerator()
 
     model_path = os.path.join(save_dir, f"dqn_traps_grid{GRID_SIZE}.pt")
-    if os.path.exists(model_path):
-        agent.load(model_path)
-        print(f"Resuming from episode {agent.episodes_done}")
-
     stage = 0
+    if os.path.exists(model_path):
+        checkpoint = agent.load(model_path)
+        stage = checkpoint.get("stage", 0)
+        print(f"Resuming from episode {agent.episodes_done}, stage {stage}")
+
     num_traps, label = TRAP_CURRICULUM[stage]
 
     print(f"Training DQN on {GRID_SIZE}x{GRID_SIZE} grids — TRAPS ONLY")
@@ -150,7 +151,7 @@ def train_traps(
 
         # Save checkpoint
         if (ep + 1) % 500 == 0:
-            agent.save(model_path)
+            agent.save(model_path, stage=stage)
 
         # Save snapshot
         if (ep + 1) % snapshot_every == 0:
@@ -160,7 +161,7 @@ def train_traps(
             )
             agent.save(snap_path)
 
-    agent.save(model_path)
+    agent.save(model_path, stage=stage)
     elapsed = time.time() - start_time
     print(f"\nTraining complete in {elapsed:.0f}s. Model saved to {model_path}")
     print(f"Reached stage {stage}/{len(TRAP_CURRICULUM)-1}: {TRAP_CURRICULUM[stage][1]}")

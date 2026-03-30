@@ -182,17 +182,19 @@ class RLSolver(BaseSolver):
         padded[:, :ph, :pw] = obs[:, :ph, :pw]
         return padded
 
-    def save(self, path: str) -> None:
-        torch.save({
+    def save(self, path: str, **extra) -> None:
+        data = {
             "policy_net": self.policy_net.state_dict(),
             "target_net": self.target_net.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "epsilon": self.epsilon,
             "episodes_done": self.episodes_done,
-        }, path)
+        }
+        data.update(extra)
+        torch.save(data, path)
         print(f"Model saved to {path}")
 
-    def load(self, path: str) -> None:
+    def load(self, path: str) -> dict:
         checkpoint = torch.load(path, map_location=self.device, weights_only=True)
         self.policy_net.load_state_dict(checkpoint["policy_net"])
         self.target_net.load_state_dict(checkpoint["target_net"])
@@ -200,6 +202,7 @@ class RLSolver(BaseSolver):
         self.epsilon = checkpoint.get("epsilon", RL_EPSILON_END)
         self.episodes_done = checkpoint.get("episodes_done", 0)
         print(f"Model loaded from {path} (episode {self.episodes_done}, epsilon {self.epsilon:.3f})")
+        return checkpoint
 
     def reset(self) -> None:
         pass
