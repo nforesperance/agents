@@ -13,6 +13,9 @@ Usage:
     python main.py play                        # Play manually
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import argparse
 import os
 import sys
@@ -84,23 +87,19 @@ def cmd_demo(args) -> None:
             name="RL (DQN)", color=COLORS["rl"], actions=actions, solve_time_ms=elapsed,
         ))
 
-    # LLM solver
+    # LLM solver (runs live during visualization)
     if "llm" in args.solvers:
         from solvers.llm_solver import LLMSolver
         try:
             llm = LLMSolver(provider=args.llm_provider, model=args.llm_model)
-            print(f"Solving with LLM ({args.llm_provider}: {llm.model})...")
-            start = time.perf_counter()
-            actions = llm.solve(level)
-            elapsed = (time.perf_counter() - start) * 1000
-            print(f"  LLM: {len(actions)} actions in {elapsed:.1f}ms")
+            print(f"LLM solver ({args.llm_provider}: {llm.model}) will solve LIVE in the visualizer")
             solver_runs.append(SolverRun(
                 name=f"LLM ({args.llm_provider})", color=COLORS["llm"],
-                actions=actions, solve_time_ms=elapsed,
+                actions=[], live_solver=llm,
             ))
         except Exception as e:
             print(f"  LLM solver error: {e}")
-            print(f"  Set ANTHROPIC_API_KEY or OPENAI_API_KEY env var")
+            print(f"  Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY env var")
 
     if not solver_runs:
         print("No solvers selected! Use --solvers astar rl llm")
@@ -327,7 +326,7 @@ def main() -> None:
     common.add_argument("--grid-size", type=int, default=DEFAULT_GRID_SIZE, help="Grid size (default: 9)")
     common.add_argument("--difficulty", type=int, default=1, choices=[1, 2, 3, 4, 5], help="Difficulty 1-5")
     common.add_argument("--seed", type=int, default=None, help="Random seed")
-    common.add_argument("--llm-provider", type=str, default="claude", choices=["claude", "openai"],
+    common.add_argument("--llm-provider", type=str, default="claude", choices=["claude", "openai", "groq", "ollama"],
                         help="LLM provider: claude or openai")
     common.add_argument("--llm-model", type=str, default=None, help="Specific LLM model name")
     common.add_argument("--rl-snapshot", type=str, default=None,

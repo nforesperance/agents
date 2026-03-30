@@ -1,11 +1,17 @@
-"""Pygame visualization — side-by-side solver comparison view."""
+"""Pygame visualization — side-by-side solver comparison view.
+
+Supports both pre-computed solvers (A*, BFS, RL) that replay step-by-step,
+and live solvers (LLM) that solve in real-time during visualization.
+"""
 
 from __future__ import annotations
 
 import os
 import sys
 import time
+import threading
 from dataclasses import dataclass, field
+from typing import Optional
 
 import pygame
 import numpy as np
@@ -31,6 +37,10 @@ class SolverRun:
     total_reward: float = 0.0
     solve_time_ms: float = 0.0
     done: bool = False
+    # Live solver support
+    live_solver: object = None       # LLMSolver instance (None = precomputed)
+    live_thinking: bool = False      # True while waiting for API response
+    live_finished: bool = False      # True when live solver is done
 
 
 class Visualizer:
@@ -44,14 +54,18 @@ class Visualizer:
         self.solver_runs = solver_runs
         self.num_solvers = len(solver_runs)
 
-        # Precompute solver states
+        # Precompute states for non-live solvers
         for run in self.solver_runs:
-            self._precompute_states(run)
+            if run.live_solver is None:
+                self._precompute_states(run)
+            else:
+                # Initialize live solver with starting state
+                state = self.level.copy()
+                run.states = [state.copy()]
+                run.step_rewards = [0.0]
 
         # Layout
         self.panel_width = WINDOW_WIDTH // max(self.num_solvers, 1)
-        self.grid_pixel_w = level.cols * TILE_SIZE
-        self.grid_pixel_h = level.rows * TILE_SIZE
 
         # Scale tiles to fit panel
         max_tile = min(
@@ -86,12 +100,43 @@ class Visualizer:
             run.step_rewards.append(run.total_reward)
         run.done = state.done and state.won
 
+    def _live_solver_thread(self, run: SolverRun) -> None:
+        """Background thread that calls the LLM solver step by step."""
+        from config import LLM_MAX_STEPS
+        current_state = self.level.copy()
+        run.total_reward = 0.0
+
+        for step in range(LLM_MAX_STEPS):
+            if current_state.done or self._shutdown.is_set():
+                break
+
+            run.live_thinking = True
+            try:
+                action = run.live_solver.solve_step(current_state)
+            except Exception as e:
+                print(f"  LLM error at step {step}: {e}")
+                from config import WAIT
+                action = WAIT
+            run.live_thinking = False
+
+            run.actions.append(action)
+            current_state, reward, done = current_state.step(action)
+            run.total_reward += reward
+            run.states.append(current_state.copy())
+            run.step_rewards.append(run.total_reward)
+            run.current_step = len(run.states) - 1
+
+            status = "WON!" if current_state.won else ("DEAD" if current_state.done else "")
+            print(f"    Step {step+1}: {ACTION_NAMES[action]:5s} | HP: {current_state.health} | "
+                  f"Keys: {len(current_state.keys_collected)}/{current_state.total_keys} {status}")
+
+        run.live_finished = True
+        run.done = current_state.won
+
     def run(self) -> None:
         """Main visualization loop."""
         import signal
-        import threading
 
-        # Watchdog: if main loop doesn't exit within 2s of _shutdown being set, force kill
         self._shutdown = threading.Event()
 
         def watchdog():
@@ -103,6 +148,12 @@ class Visualizer:
         wd.start()
 
         signal.signal(signal.SIGINT, lambda *_: self._shutdown.set())
+
+        # Start live solver threads
+        for run in self.solver_runs:
+            if run.live_solver is not None:
+                t = threading.Thread(target=self._live_solver_thread, args=(run,), daemon=True)
+                t.start()
 
         running = True
         last_step_time = pygame.time.get_ticks()
@@ -127,29 +178,41 @@ class Visualizer:
                     elif event.key == pygame.K_r:
                         self._reset_all()
 
-            # Auto-advance
+            # Auto-advance precomputed solvers
             now = pygame.time.get_ticks()
             if not self.paused and not self.all_done and now - last_step_time >= self.speed:
-                self._advance_all()
+                self._advance_precomputed()
                 last_step_time = now
 
             self._draw()
             pygame.display.flip()
 
+        self._shutdown.set()
         pygame.quit()
         os._exit(0)
 
-    def _advance_all(self) -> None:
+    def _advance_precomputed(self) -> None:
+        """Advance only precomputed (non-live) solver runs."""
         all_finished = True
         for run in self.solver_runs:
+            if run.live_solver is not None:
+                # Live solvers advance themselves
+                if not run.live_finished:
+                    all_finished = False
+                continue
             if run.current_step < len(run.states) - 1:
                 run.current_step += 1
                 all_finished = False
         self.all_done = all_finished
 
+    def _advance_all(self) -> None:
+        """Manual step advance (RIGHT key) — only advances precomputed."""
+        self._advance_precomputed()
+
     def _reset_all(self) -> None:
         for run in self.solver_runs:
-            run.current_step = 0
+            if run.live_solver is None:
+                run.current_step = 0
         self.all_done = False
 
     def _draw(self) -> None:
@@ -173,35 +236,63 @@ class Visualizer:
         self._draw_bottom_bar()
 
     def _draw_solver_panel(self, run: SolverRun, x_offset: int) -> None:
-        state = run.states[min(run.current_step, len(run.states) - 1)]
+        # For live solvers, current_step is updated by the thread
+        step_idx = min(run.current_step, len(run.states) - 1)
+        state = run.states[step_idx] if run.states else self.level
 
         # Title
         title = self.font_large.render(run.name, True, run.color)
         self.screen.blit(title, (x_offset + 10, 10))
 
         # Stats
-        step_text = f"Step: {run.current_step}/{len(run.states)-1}"
+        total_steps = len(run.states) - 1 if run.states else 0
+        step_text = f"Step: {step_idx}/{total_steps}"
         stats = self.font_small.render(step_text, True, COLORS["text"])
         self.screen.blit(stats, (x_offset + 10, 38))
 
-        # Show cumulative reward up to current step
-        current_reward = run.step_rewards[run.current_step] if run.current_step < len(run.step_rewards) else run.total_reward
+        # Reward
+        current_reward = run.step_rewards[step_idx] if step_idx < len(run.step_rewards) else run.total_reward
         reward_text = f"Reward: {current_reward:.0f}"
         rt = self.font_small.render(reward_text, True, COLORS["text"])
         self.screen.blit(rt, (x_offset + 10, 55))
 
-        # Show solve time with appropriate precision
-        if run.solve_time_ms < 1:
-            time_text = f"Solve: {run.solve_time_ms * 1000:.0f}us"
-        elif run.solve_time_ms < 100:
-            time_text = f"Solve: {run.solve_time_ms:.1f}ms"
+        # Solve time / live status
+        if run.live_solver is not None:
+            if run.live_thinking:
+                time_text = "THINKING..."
+                tt = self.font_small.render(time_text, True, (255, 255, 100))
+            elif run.live_finished:
+                time_text = "DONE"
+                tt = self.font_small.render(time_text, True, COLORS["text"])
+            else:
+                time_text = "WAITING..."
+                tt = self.font_small.render(time_text, True, (150, 150, 170))
         else:
-            time_text = f"Solve: {run.solve_time_ms:.0f}ms"
-        tt = self.font_small.render(time_text, True, COLORS["text"])
+            if run.solve_time_ms < 1:
+                time_text = f"Solve: {run.solve_time_ms * 1000:.0f}us"
+            elif run.solve_time_ms < 100:
+                time_text = f"Solve: {run.solve_time_ms:.1f}ms"
+            else:
+                time_text = f"Solve: {run.solve_time_ms:.0f}ms"
+            tt = self.font_small.render(time_text, True, COLORS["text"])
         self.screen.blit(tt, (x_offset + 150, 55))
 
-        status = "WON!" if state.won else ("FAILED" if state.done else "RUNNING...")
-        status_color = (0, 255, 100) if state.won else ((255, 60, 60) if state.done else COLORS["text"])
+        # Status
+        if run.live_solver is not None and run.live_thinking:
+            status = "SOLVING..."
+            status_color = (255, 255, 100)
+        elif state.won:
+            status = "WON!"
+            status_color = (0, 255, 100)
+        elif state.done:
+            status = "FAILED"
+            status_color = (255, 60, 60)
+        elif run.live_solver is not None and not run.live_finished:
+            status = "LIVE"
+            status_color = (100, 255, 100)
+        else:
+            status = "RUNNING..."
+            status_color = COLORS["text"]
         st = self.font.render(status, True, status_color)
         self.screen.blit(st, (x_offset + 150, 36))
 
@@ -239,7 +330,6 @@ class Visualizer:
                 if tile == KEY:
                     pygame.draw.circle(self.screen, (255, 215, 0), center, small)
                 elif tile == TRAP:
-                    # X mark
                     pygame.draw.line(self.screen, (255, 255, 255), (rx + 4, ry + 4), (rx + self.tile - 5, ry + self.tile - 5), 2)
                     pygame.draw.line(self.screen, (255, 255, 255), (rx + self.tile - 5, ry + 4), (rx + 4, ry + self.tile - 5), 2)
                 elif tile == GOAL:

@@ -14,23 +14,31 @@ from solvers.base import BaseSolver
 SYSTEM_PROMPT = """\
 You are an AI agent solving a grid-based puzzle game. You see the grid and must choose actions to reach the goal (G).
 
-Rules:
-- P = your position. Move with: UP, DOWN, LEFT, RIGHT, WAIT
-- # = walls (impassable)
-- . = floor (safe)
-- X = trap (damages you, avoid if possible)
-- K = key (collect all keys before you can open doors)
-- D = door (requires all keys collected to pass through)
-- G = goal (reach this to win)
-- E = enemy (moves around, damages you on contact, avoid)
+COORDINATE SYSTEM:
+- The grid is shown with row 0 at the TOP and column 0 at the LEFT.
+- UP moves you to a LOWER row number (visually upward on screen).
+- DOWN moves you to a HIGHER row number (visually downward on screen).
+- LEFT moves you to a LOWER column number (visually left on screen).
+- RIGHT moves you to a HIGHER column number (visually right on screen).
 
-Strategy tips:
-- Collect all keys (K) before heading to the door (D)
-- Avoid traps (X) and enemies (E) when possible
-- Find the shortest safe path to the goal (G)
+TILE LEGEND:
+- P = your position
+- # = wall (impassable — if you try to move into a wall, you stay in place!)
+- . = floor (safe to walk on)
+- X = trap (damages you -25 HP, avoid if possible)
+- K = key (collect ALL keys before you can open doors)
+- D = door (requires all keys collected to pass through)
+- G = goal (reach this to win!)
+- E = enemy (patrols around, damages you -30 HP on contact)
+
+STRATEGY:
+1. Look at the tiles ADJACENT to P (up, down, left, right).
+2. Only move toward a tile that is NOT a wall (#).
+3. If your last move did not change your position, you hit a wall — try a DIFFERENT direction!
+4. Collect all keys (K) before heading to the door (D), then reach the goal (G).
+5. Avoid traps (X) and enemies (E) when possible.
 
 Respond with ONLY a JSON object: {"action": "UP"} or {"action": "DOWN"} etc.
-Think about the best move, then respond with the JSON only.
 """
 
 
@@ -50,6 +58,8 @@ class LLMSolver(BaseSolver):
         self.model = model
         self.client = None
         self.conversation_history: list[dict] = []
+        self._prev_pos = None
+        self._last_action = None
         self._init_client()
 
     def _init_client(self) -> None:
@@ -67,12 +77,36 @@ class LLMSolver(BaseSolver):
                 self.model = self.model or "gpt-4o"
             except ImportError:
                 raise ImportError("pip install openai")
+        elif self.provider == "groq":
+            try:
+                import openai
+                import os
+                self.client = openai.OpenAI(
+                    api_key=os.environ.get("GROQ_API_KEY"),
+                    base_url="https://api.groq.com/openai/v1",
+                )
+                self.model = self.model or "llama-3.3-70b-versatile"
+            except ImportError:
+                raise ImportError("pip install openai")
+        elif self.provider == "ollama":
+            try:
+                import openai
+                self.client = openai.OpenAI(
+                    api_key="ollama",
+                    base_url="http://localhost:11434/v1",
+                )
+                self.model = self.model or "llama3.2"
+            except ImportError:
+                raise ImportError("pip install openai")
         else:
-            raise ValueError(f"Unknown provider: {self.provider}. Use 'claude' or 'openai'.")
+            raise ValueError(f"Unknown provider: {self.provider}. Use 'claude', 'openai', 'groq', or 'ollama'.")
 
-    def _ask(self, state_text: str) -> str:
+    def _ask(self, state_text: str, feedback: str = "") -> str:
         """Send the current state to the LLM and get an action."""
-        user_msg = f"Current game state:\n\n{state_text}\n\nWhat is your next move? Respond with JSON only."
+        user_msg = f"Current game state:\n\n{state_text}"
+        if feedback:
+            user_msg += f"\n\n{feedback}"
+        user_msg += "\n\nWhat is your next move? Respond with JSON only."
 
         if self.provider == "claude":
             response = self.client.messages.create(
@@ -128,6 +162,8 @@ class LLMSolver(BaseSolver):
     def solve(self, state: GameState) -> list[int]:
         """Solve by repeatedly asking the LLM for the next move."""
         self.conversation_history = []
+        self._prev_pos = None
+        self._last_action = None
         actions = []
         current = state.copy()
 
@@ -136,27 +172,59 @@ class LLMSolver(BaseSolver):
                 break
 
             state_text = current.to_text()
+            feedback = self._make_feedback(current)
             try:
-                response = self._ask(state_text)
+                response = self._ask(state_text, feedback)
                 action = self._parse_action(response)
             except Exception as e:
                 print(f"LLM error at step {step}: {e}")
                 action = WAIT
 
+            self._prev_pos = current.player_pos
+            self._last_action = action
             actions.append(action)
-            current, _, _ = current.step(action)
+            current, reward, _ = current.step(action)
+            status = "WON!" if current.won else ("DEAD" if current.done else "")
+            print(f"    Step {step+1}: {ACTION_NAMES[action]:5s} | HP: {current.health} | Keys: {len(current.keys_collected)}/{current.total_keys} {status}")
 
         return actions
 
     def solve_step(self, state: GameState) -> int:
         """Single step — useful for real-time visualization."""
         state_text = state.to_text()
+        feedback = self._make_feedback(state)
         try:
-            response = self._ask(state_text)
-            return self._parse_action(response)
+            response = self._ask(state_text, feedback)
+            action = self._parse_action(response)
         except Exception as e:
             print(f"LLM error: {e}")
-            return WAIT
+            action = WAIT
+
+        self._prev_pos = state.player_pos
+        self._last_action = action
+        return action
+
+    def _make_feedback(self, state: GameState) -> str:
+        """Generate feedback about the previous move."""
+        if self._prev_pos is None or self._last_action is None:
+            return ""
+
+        parts = []
+        if state.player_pos == self._prev_pos:
+            parts.append(
+                f"WARNING: Your last move ({ACTION_NAMES[self._last_action]}) "
+                f"FAILED — you hit a wall and stayed at the same position! "
+                f"Try a DIFFERENT direction."
+            )
+        else:
+            parts.append(
+                f"Your last move ({ACTION_NAMES[self._last_action]}) succeeded: "
+                f"moved from row {self._prev_pos[0]},col {self._prev_pos[1]} "
+                f"to row {state.player_pos[0]},col {state.player_pos[1]}."
+            )
+        return " ".join(parts)
 
     def reset(self) -> None:
         self.conversation_history = []
+        self._prev_pos = None
+        self._last_action = None
