@@ -31,6 +31,7 @@ from solvers.rl_solver import RLSolver
 TRAP_CURRICULUM = [
     (5, 0, "5x5 no traps"),
     (7, 0, "7x7 no traps"),
+    (9, 0, "9x9 no traps"),
     (10, 0, "10x10 no traps"),
     (10, 3, "10x10 + 3 traps"),
     (10, 8, "10x10 + 8 traps"),
@@ -38,8 +39,8 @@ TRAP_CURRICULUM = [
     (10, 25, "10x10 + 25 traps"),
 ]
 
-ADVANCE_THRESHOLD = 0.40
-ADVANCE_WINDOW = 100
+ADVANCE_THRESHOLD = 0.30
+ADVANCE_WINDOW = 200
 MAX_GRID_SIZE = 10
 
 
