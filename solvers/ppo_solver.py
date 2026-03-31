@@ -96,6 +96,7 @@ class PPOSolver(BaseSolver):
         model_path: Optional[str] = None,
     ):
         self.grid_size = grid_size
+        self.obs_size = 10
         self.model = None
         if model_path and os.path.exists(model_path):
             self.load(model_path)
